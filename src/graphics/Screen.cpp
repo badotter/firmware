@@ -275,7 +275,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Web or CLI clients.");
     } else {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more info.");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "");
     }
 

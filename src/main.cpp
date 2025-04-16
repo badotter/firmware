@@ -133,6 +133,9 @@ void setupNicheGraphics();
 #include "nicheGraphics.h"
 #endif
 
+#include <Adafruit_INA219.h>
+Adafruit_INA219 ina219;
+
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
