@@ -27,6 +27,19 @@ SPIClass SPI1(HSPI);
 #define SD_SPI_FREQUENCY 4000000U
 #endif
 
+
+void sdPowerOn() {
+    digitalWrite(SD_POWER_PIN, HIGH);
+    delay(100);  // Give it time to stabilize power
+    Serial.println("SD Card powered ON");
+}
+
+// Function to turn SD card power off
+void sdPowerOff() {
+    digitalWrite(SD_POWER_PIN, LOW);
+    Serial.println("SD Card powered OFF");
+}
+
 #endif // HAS_SDCARD
 
 /**
@@ -308,8 +321,9 @@ void setupSDCard()
 {
 #ifdef HAS_SDCARD
     concurrency::LockGuard g(spiLock);
-    SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-    if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {
+    //SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+    SDHandler.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
+    if (!SD.begin(SD_CS_PIN, SDHandler, SD_SPI_FREQUENCY)) {
         LOG_DEBUG("No SD_MMC card detected");
         return;
     }

@@ -133,8 +133,20 @@ void setupNicheGraphics();
 #include "nicheGraphics.h"
 #endif
 
-#include <Adafruit_INA219.h>
-Adafruit_INA219 ina219;
+//#include <Adafruit_INA219.h>
+//Adafruit_INA219 ina219;
+//bool ina219Available = false;
+//TwoWire myI2C = TwoWire(1);
+//#define POWER_EN_PIN 36  // GPIO that controls the first Ve pin
+//#define VE_PIN 21
+
+#define SD_POWER_PIN 5  // GPIO pin connected to transistor base
+#define DO_CURRENT_SENSING 1
+
+//#ifdef HAS_SDCARD
+//#include <SD.h>
+//#include "Logger.h"
+//#endif
 
 using namespace concurrency;
 
@@ -324,6 +336,11 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+
+    // Initialize the power control pin as output
+    pinMode(SD_POWER_PIN, OUTPUT);
+    // Initially keep SD card powered off
+    digitalWrite(SD_POWER_PIN, LOW);
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
