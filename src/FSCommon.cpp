@@ -327,7 +327,6 @@ void setupSDCard()
 {
 #ifdef HAS_SDCARD
     concurrency::LockGuard g(spiLock);
-    //SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
     SDHandler.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
     if (!SD.begin(SD_CS_PIN, SDHandler, SD_SPI_FREQUENCY)) {
         LOG_DEBUG("No SD_MMC card detected");

@@ -142,6 +142,7 @@ void setupNicheGraphics();
 
 #ifdef HAS_SDCARD
 #include <SD.h>
+#include <SPI.h>
 
 
 #define SD_MOSI_PIN 6
@@ -149,6 +150,14 @@ void setupNicheGraphics();
 #define SD_SCK_PIN  7
 #define SD_CS_PIN   3
 #define SD_POWER_PIN 5  // GPIO pin connected to transistor base
+
+#ifdef SDCARD_USE_SPI1
+SPIClass SPInew(HSPI);
+//#define SDHandler SPI1
+#else
+#define SDHandler SPI
+#endif
+
 void testSDCard();
 //#define DO_CURRENT_SENSING 1
 #endif
@@ -354,13 +363,15 @@ void testSDCard() {
     //digitalWrite(SD_POWER_PIN, LOW);
     //delay(1000);
 
-    //LOG_DEBUG("SD card power ON");
-    //digitalWrite(SD_POWER_PIN, HIGH);
-    //delay(1000);  // Even longer delay
+    LOG_DEBUG("SD card power ON");
+    digitalWrite(SD_POWER_PIN, HIGH);
+    delay(250);
 
-    if (!SD.begin(SD_CS_PIN)) {
+    //SDHandler.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
+    SPInew.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
+    if (!SD.begin(SD_CS_PIN, SPInew, 4000000U)) {
         LOG_DEBUG("SD init failed");
-        //digitalWrite(SD_POWER_PIN, LOW);
+        digitalWrite(SD_POWER_PIN, LOW);
         return;
     }
 
@@ -373,16 +384,16 @@ void testSDCard() {
 
     if (cardType == CARD_NONE) {
         LOG_DEBUG("No SD card attached");
-        //digitalWrite(SD_POWER_PIN, LOW);
+        digitalWrite(SD_POWER_PIN, LOW);
         return;
     }
 
     // Try to write file
-    File testFile = SD.open("/test3.txt", FILE_WRITE);
+    File testFile = SD.open("/test4.txt", FILE_WRITE);
     if (testFile) {
         LOG_DEBUG("File opened for writing");
         testFile.println("Hello from Meshtastic!");
-        testFile.println("Testing 789");
+        testFile.println("Testing 100");
         testFile.flush();  // Force write to disk
         testFile.close();
         LOG_DEBUG("File written and closed");
@@ -402,7 +413,7 @@ void testSDCard() {
        LOG_DEBUG("Failed to open file for reading");
     }*/
 
-    //digitalWrite(SD_POWER_PIN, LOW);
+    digitalWrite(SD_POWER_PIN, LOW);
     LOG_DEBUG("SD test complete");
 }
 #endif
@@ -414,9 +425,8 @@ void setup()
 #ifdef HAS_SDCARD
     // Initialize the power control pin as output
     pinMode(SD_POWER_PIN, OUTPUT);
-    // Initially keep SD card powered ON - for testing. Would prefer off and on for using it but problems abound.
-    digitalWrite(SD_POWER_PIN, HIGH);
-    delay(500); // wait for power to stabilize
+    // Initially keep SD card powered OFF
+    digitalWrite(SD_POWER_PIN, LOW);
 #endif
 
 #if defined(PIN_POWER_EN)
