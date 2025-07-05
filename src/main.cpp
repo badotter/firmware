@@ -140,8 +140,19 @@ void setupNicheGraphics();
 //#define POWER_EN_PIN 36  // GPIO that controls the first Ve pin
 //#define VE_PIN 21
 
+#ifdef HAS_SDCARD
+#include <SD.h>
+
+
+#define SD_MOSI_PIN 6
+#define SD_MISO_PIN 2
+#define SD_SCK_PIN  7
+#define SD_CS_PIN   3
 #define SD_POWER_PIN 5  // GPIO pin connected to transistor base
-#define DO_CURRENT_SENSING 1
+void testSDCard();
+//#define DO_CURRENT_SENSING 1
+#endif
+
 
 //#ifdef HAS_SDCARD
 //#include <SD.h>
@@ -333,14 +344,80 @@ void printInfo()
 {
     LOG_INFO("S:B:%d,%s", HW_VENDOR, optstr(APP_VERSION));
 }
+
+#ifdef HAS_SDCARD
+void testSDCard() {
+    LOG_DEBUG("Starting SD test...");
+
+    // Test the power pin control
+    //LOG_DEBUG("SD card power OFF");
+    //digitalWrite(SD_POWER_PIN, LOW);
+    //delay(1000);
+
+    //LOG_DEBUG("SD card power ON");
+    //digitalWrite(SD_POWER_PIN, HIGH);
+    //delay(1000);  // Even longer delay
+
+    if (!SD.begin(SD_CS_PIN)) {
+        LOG_DEBUG("SD init failed");
+        //digitalWrite(SD_POWER_PIN, LOW);
+        return;
+    }
+
+    LOG_DEBUG("SD init success");
+
+    // Check if we can see the card
+    uint8_t cardType = SD.cardType();
+    LOG_DEBUG("Card type: %d",cardType);
+    //LOG_DEBUG(cardType);
+
+    if (cardType == CARD_NONE) {
+        LOG_DEBUG("No SD card attached");
+        //digitalWrite(SD_POWER_PIN, LOW);
+        return;
+    }
+
+    // Try to write file
+    File testFile = SD.open("/test3.txt", FILE_WRITE);
+    if (testFile) {
+        LOG_DEBUG("File opened for writing");
+        testFile.println("Hello from Meshtastic!");
+        testFile.println("Testing 789");
+        testFile.flush();  // Force write to disk
+        testFile.close();
+        LOG_DEBUG("File written and closed");
+    } else {
+        LOG_DEBUG("Failed to open file for writing");
+    }
+
+    /* Try to read it back immediately
+    testFile = SD.open("/test.txt", FILE_READ);
+    if (testFile) {
+        LOG_DEBUG("File contents: ...");
+        //while (testFile.available()) {
+        //    LOG_DEBUG(testFile.read());
+        //}
+        testFile.close();
+    } else {
+       LOG_DEBUG("Failed to open file for reading");
+    }*/
+
+    //digitalWrite(SD_POWER_PIN, LOW);
+    LOG_DEBUG("SD test complete");
+}
+#endif
+
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
 
+#ifdef HAS_SDCARD
     // Initialize the power control pin as output
     pinMode(SD_POWER_PIN, OUTPUT);
-    // Initially keep SD card powered off
-    digitalWrite(SD_POWER_PIN, LOW);
+    // Initially keep SD card powered ON - for testing. Would prefer off and on for using it but problems abound.
+    digitalWrite(SD_POWER_PIN, HIGH);
+    delay(500); // wait for power to stabilize
+#endif
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
@@ -745,7 +822,7 @@ void setup()
 #endif
 
 #ifdef HAS_SDCARD
-    setupSDCard();
+    //setupSDCard();
 #endif
 
     // LED init
@@ -1299,6 +1376,11 @@ void setup()
 #ifdef ARDUINO_ARCH_ESP32
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
+#endif
+
+
+#ifdef HAS_SDCARD
+    testSDCard();
 #endif
 }
 #endif

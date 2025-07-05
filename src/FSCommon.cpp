@@ -16,6 +16,12 @@
 #include <SD.h>
 #include <SPI.h>
 
+#define SD_MOSI_PIN 6
+#define SD_MISO_PIN 2
+#define SD_SCK_PIN  7
+#define SD_CS_PIN   3
+#define SD_POWER_PIN 5
+
 #ifdef SDCARD_USE_SPI1
 SPIClass SPI1(HSPI);
 #define SDHandler SPI1
