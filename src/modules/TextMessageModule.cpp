@@ -1,4 +1,5 @@
 #include "TextMessageModule.h"
+#include "Router.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -11,8 +12,10 @@
 
 TextMessageModule *textMessageModule;
 
+
 void handleCommand(uint32_t fromNode, const char* commandText, uint32_t toNode);
 void handleLogsCommand(uint32_t fromNode, const std::vector<std::string>& parts, uint32_t toNode);
+void sendResponse(uint32_t toNode, const char* message);
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
@@ -101,6 +104,7 @@ void parseCommand(const char* commandText, char** parts, int& partCount, int max
 
     while (token != nullptr && partCount < maxParts) {
         parts[partCount] = strdup(token);  // Copy each part
+        LOG_DEBUG("argument:  %s", token);
         partCount++;
         token = strtok(nullptr, " ");
     }
@@ -120,7 +124,9 @@ void handleCommand(uint32_t fromNode, const char* commandText, uint32_t toNode) 
         // Handle the first argument if it exists
         LOG_DEBUG("Arg  %s", parts[1]);
     }
-
+    char responseMsg[256];
+    snprintf(responseMsg, sizeof(responseMsg), "Got a command: %s", commandText);
+    sendResponse(fromNode, responseMsg);
     //if (cmd == "logs") {
     //    handleLogsCommand(fromNode, parts, toNode);
     //}// else if (cmd == "status") {
@@ -131,22 +137,112 @@ void handleCommand(uint32_t fromNode, const char* commandText, uint32_t toNode) 
 }
 
 void sendResponse(uint32_t toNode, const char* message) {
-    /*
-    // Create a new mesh packet
-    meshtastic_MeshPacket *p = allocMeshPacket();
+    meshtastic_MeshPacket *p = router->allocForSending(); // Still need to find this function
 
-    // Set up the packet
-    p->to = toNode;
-    p->from = nodeDB->getNodeNum();
-    p->id = generatePacketId();
-    p->want_ack = false;  // Don't need ACKs for status responses
-
-    // Set up the payload as a text message
+    p->to = toNode;        // ✅ DM to specific node (not 0)
+    p->from = nodeDB->getNodeNum();  // Your node ID
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    // Send it via the router
-    service.sendToMesh(p, RxSource::RX_SRC_LOCAL);
-    */
+    size_t len = strlen(message);
+    if (len > sizeof(p->decoded.payload.bytes)) {
+        len = sizeof(p->decoded.payload.bytes);
+    }
+
+    memcpy(p->decoded.payload.bytes, message, len);
+    p->decoded.payload.size = len;
+
+    // Send it
+    service->sendToMesh(p, RxSource::RX_SRC_LOCAL);
 }
+
+///////////////////////////////////////////////////////////////////////////
+// Example usage of LogQuerySystem in TextMessageModule
+
+/*
+#ifdef HAS_SDCARD
+#include "LogQuerySystem.h"
+LogQuerySystem* logQuery = nullptr;
+#endif
+
+// In TextMessageModule constructor or init:
+#ifdef HAS_SDCARD
+    if (!logQuery) {
+        logQuery = new LogQuerySystem();
+    }
+#endif
+
+// Update your handleCommand function:
+void handleCommand(uint32_t fromNode, const char* commandText, uint32_t toNode) {
+    char* parts[10];
+    int partCount = 0;
+    parseCommand(commandText, parts, partCount, 10);
+
+    if (partCount == 0) return;
+
+    char responseMsg[256];
+
+    if (strcmp(parts[0], "/logs") == 0) {
+        if (partCount < 2) {
+            sendResponse(fromNode, "Usage: /logs [recent|from|dms|channel|search|stats] [args]");
+            return;
+        }
+
+        if (strcmp(parts[1], "recent") == 0) {
+            int count = (partCount > 2) ? atoi(parts[2]) : 5;
+            auto messages = logQuery->getRecentMessages(min(count, 10));
+
+            for (const auto& msg : messages) {
+                snprintf(responseMsg, sizeof(responseMsg), "%s: %s", msg.senderName, msg.message);
+                sendResponse(fromNode, responseMsg);
+                delay(100); // Small delay between messages
+            }
+        }
+        else if (strcmp(parts[1], "from") == 0 && partCount > 2) {
+            uint32_t targetUser = strtoul(parts[2], nullptr, 16);
+            auto messages = logQuery->getMessagesFromUser(targetUser, 5);
+
+            snprintf(responseMsg, sizeof(responseMsg), "Messages from 0x%08x:", targetUser);
+            sendResponse(fromNode, responseMsg);
+
+            for (const auto& msg : messages) {
+                snprintf(responseMsg, sizeof(responseMsg), "%s", msg.message);
+                sendResponse(fromNode, responseMsg);
+                delay(100);
+            }
+        }
+        else if (strcmp(parts[1], "dms") == 0) {
+            auto messages = logQuery->getDMsWithUser(fromNode, 5);
+            sendResponse(fromNode, "Your recent DMs:");
+
+            for (const auto& msg : messages) {
+                snprintf(responseMsg, sizeof(responseMsg), "%s: %s", msg.senderName, msg.message);
+                sendResponse(fromNode, responseMsg);
+                delay(100);
+            }
+        }
+        else if (strcmp(parts[1], "search") == 0 && partCount > 2) {
+            auto messages = logQuery->searchMessages(parts[2], 5);
+            snprintf(responseMsg, sizeof(responseMsg), "Search results for '%s':", parts[2]);
+            sendResponse(fromNode, responseMsg);
+
+            for (const auto& msg : messages) {
+                snprintf(responseMsg, sizeof(responseMsg), "%s: %s",  msg.senderName, msg.message);
+                sendResponse(fromNode, responseMsg);
+                delay(100);
+            }
+        }
+        else if (strcmp(parts[1], "stats") == 0) {
+            auto stats = logQuery->getLogStatistics();
+            snprintf(responseMsg, sizeof(responseMsg),
+                    "Stats: %d msgs, %d DMs, %d users",
+                    stats.totalMessages, stats.totalDMs, stats.uniqueUsers);
+            sendResponse(fromNode, responseMsg);
+        }
+    }
+
+    // Clean up allocated strings
+    for (int i = 0; i < partCount; i++) {
+        free(parts[i]);
+    }
+}
+*/

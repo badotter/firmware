@@ -36,7 +36,10 @@ private:
     bool flushToSDCard();
 
     // Immediate write functions (no buffering)
+    void sanitizeForCSV(const char* input, char* output, size_t maxLen);
+    bool atomicWriteMessage(uint32_t from, uint32_t to, const char* senderName, uint8_t channelIndex, const char* message);
     bool writeMessageToSDCard(uint32_t from, uint32_t to, const char* senderName, uint8_t channelIndex, const char* message);
+    bool atomicWriteTelemetry(int16_t current_ma, int16_t voltage_mv);
     bool writeTelemetryToSDCard(int16_t current_ma, int16_t voltage_mv);
 
 public:
