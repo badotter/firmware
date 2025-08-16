@@ -2,11 +2,10 @@
 
 #include <Arduino.h>
 #include <vector>
-#include <functional>
 #include "FSCommon.h"
 
 struct MessageRecord {
-    char timestamp[32];  // Changed from uint32_t to string
+    char timestamp[32];
     uint32_t from;
     uint32_t to;
     char senderName[32];
@@ -19,8 +18,8 @@ struct MessageRecord {
 };
 
 struct QueryFilter {
-    char startTime[32] = "";      // Changed from uint32_t to string
-    char endTime[32] = "";        // Changed from uint32_t to string  
+    char startTime[32] = "";
+    char endTime[32] = "";
     uint32_t fromUser = 0;        // 0 = any user
     uint32_t toUser = 0;          // 0 = any recipient
     uint32_t channelHash = 0;     // 0 = base channel
@@ -33,36 +32,30 @@ struct QueryFilter {
 class LogQuerySystem {
 private:
     static const char* MESSAGE_LOG_FILE;
-    static const char* INDEX_FILE;
     static const char* COMMAND_LOG_FILE;
     
-    struct IndexEntry {
-        char timestamp[32];       // Changed from uint32_t to string
-        uint32_t filePosition;
-        uint32_t from;
-        uint32_t channelHash;
-        bool isDM;
-        
-        // Helper function for timestamp comparisons
-        uint32_t getTimestampSeconds() const;
-    };
+    std::vector<MessageRecord> allMessages;
+    std::vector<MessageRecord> allCommands;
+    bool messagesLoaded = false;
+    bool commandsLoaded = false;
     
-    std::vector<IndexEntry> messageIndex;
-    std::vector<IndexEntry> commandIndex;
-    bool indexLoaded = false;
-    bool commandIndexLoaded = false;
-    
-public:
-    // Helper functions for timestamp handling (made public static)
-    static uint32_t parseTimestampToSeconds(const char* timestamp);
+    // Helper functions
+    bool parseCSVLine(const char* line, MessageRecord& record);
+    bool matchesFilter(const MessageRecord& record, const QueryFilter& filter);
     bool isTimestampInRange(const char* timestamp, const char* startTime, const char* endTime) const;
-
-private:
     
 public:
     LogQuerySystem();
     
-    // Main query function
+    // Helper functions for timestamp handling (made public static)
+    static uint32_t parseTimestampToSeconds(const char* timestamp);
+    
+    // Load data from SD card into RAM
+    bool loadMessages();
+    bool loadCommands();
+    void refreshData();  // Reload both if needed
+    
+    // Main query functions
     std::vector<MessageRecord> queryMessages(const QueryFilter& filter);
     std::vector<MessageRecord> queryCommands(const QueryFilter& filter);
     
@@ -77,14 +70,6 @@ public:
     std::vector<MessageRecord> getTodaysCommands();
     std::vector<MessageRecord> searchMessages(const char* searchText, int count = 20);
     std::vector<MessageRecord> searchCommands(const char* searchText, int count = 20);
-    std::vector<MessageRecord> readRecentRecords(const char* filename, int maxCount);
-
-    // Index management
-    bool rebuildIndex();
-    bool rebuildCommandIndex();
-    bool loadIndex();
-    bool loadCommandIndex();
-    void addToIndex(const MessageRecord& record, uint32_t filePosition);
     
     // Statistics
     struct LogStats {
@@ -93,14 +78,12 @@ public:
         uint32_t totalBroadcasts;
         uint32_t totalCommands;
         uint32_t uniqueUsers;
-        char oldestTimestamp[32];   // Changed from uint32_t to string
-        char newestTimestamp[32];   // Changed from uint32_t to string
+        char oldestTimestamp[32];
+        char newestTimestamp[32];
     };
     LogStats getLogStatistics();
     
-private:
-    bool parseCSVLine(const char* line, MessageRecord& record);
-    bool matchesFilter(const MessageRecord& record, const QueryFilter& filter);
-    std::vector<MessageRecord> readRecordsAtPositions(const std::vector<uint32_t>& positions);
-    std::vector<MessageRecord> readCommandsAtPositions(const std::vector<uint32_t>& positions);
+    // Status
+    int getMessageCount() { return allMessages.size(); }
+    int getCommandCount() { return allCommands.size(); }
 };

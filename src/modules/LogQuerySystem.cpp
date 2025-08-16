@@ -3,15 +3,11 @@
 #include "configuration.h"
 #include "SimpleTimeManager.h"
 
-extern SimpleTimeManager timeManager;
-
 const char* LogQuerySystem::MESSAGE_LOG_FILE = "/message_log.csv";
 const char* LogQuerySystem::COMMAND_LOG_FILE = "/command_log.csv";
-const char* LogQuerySystem::INDEX_FILE = "/msg_index.dat";
 
 LogQuerySystem::LogQuerySystem() {
-    loadIndex();
-    loadCommandIndex();
+    // Don't load on construction - wait for first query
 }
 
 // Helper function to parse timestamp string to seconds for comparisons
@@ -26,7 +22,6 @@ uint32_t LogQuerySystem::parseTimestampToSeconds(const char* timestamp) {
     if (parsed != 6) return 0;
     
     // Simple conversion to seconds (not perfect but good enough for comparisons)
-    // Days since Jan 1, 2024
     uint32_t days = 0;
     
     // Add days for complete years since 2024
@@ -54,10 +49,6 @@ uint32_t MessageRecord::getTimestampSeconds() const {
     return LogQuerySystem::parseTimestampToSeconds(timestamp);
 }
 
-uint32_t LogQuerySystem::IndexEntry::getTimestampSeconds() const {
-    return LogQuerySystem::parseTimestampToSeconds(timestamp);
-}
-
 bool LogQuerySystem::isTimestampInRange(const char* timestamp, const char* startTime, const char* endTime) const {
     if (strlen(startTime) == 0 && strlen(endTime) == 0) return true;
     
@@ -68,103 +59,113 @@ bool LogQuerySystem::isTimestampInRange(const char* timestamp, const char* start
     return ts >= start && ts <= end;
 }
 
-// New helper function to read records from end of file backwards
-std::vector<MessageRecord> LogQuerySystem::readRecentRecords(const char* filename, int maxCount) {
-    std::vector<MessageRecord> records;
+bool LogQuerySystem::loadMessages() {
+    LOG_INFO("Loading all messages into RAM...");
+    allMessages.clear();
+    allMessages.reserve(200);  // Pre-allocate for efficiency
     
-    File file = SD.open(filename, FILE_READ);
+    File file = SD.open(MESSAGE_LOG_FILE, FILE_READ);
     if (!file) {
-        LOG_ERROR("Failed to open %s", filename);
-        return records;
+        LOG_WARN("No message log file found");
+        messagesLoaded = true; // Mark as loaded even if empty
+        return true;
     }
     
-    // Find the end of file
-    file.seek(0, SeekEnd);
-    uint32_t fileSize = file.position();
+    char line[512];
+    bool firstLine = true;
     
-    if (fileSize == 0) {
-        file.close();
-        return records;
-    }
-    
-    // Read backwards line by line
-    std::vector<String> lines;
-    String currentLine = "";
-    bool inHeader = true;
-    
-    // Start from end and work backwards
-    for (uint32_t pos = fileSize - 1; pos > 0 && lines.size() < maxCount + 10; pos--) {
-        file.seek(pos);
-        char c = file.read();
+    while (file.available()) {
+        memset(line, 0, sizeof(line));
+        int lineLength = file.readBytesUntil('\n', line, sizeof(line) - 1);
         
-        if (c == '\n' || pos == 1) {
-            if (currentLine.length() > 0) {
-                // Skip header line (it will be the last line we encounter when reading backwards)
-                if (currentLine.indexOf("timestamp,from,to") >= 0) {
-                    break; // We've reached the header
-                }
-                lines.push_back(currentLine);
-                currentLine = "";
-                
-                if (lines.size() >= maxCount + 10) break; // Get some extra for filtering
+        if (lineLength > 0) {
+            line[lineLength] = '\0';
+            
+            // Skip header line
+            if (firstLine) {
+                firstLine = false;
+                continue;
             }
-        } else if (c != '\r') {
-            currentLine = String(c) + currentLine;
+            
+            MessageRecord record;
+            if (parseCSVLine(line, record)) {
+                allMessages.push_back(record);  // File order = chronological order
+            }
         }
     }
     
     file.close();
     
-    // Parse the lines (they're already in reverse chronological order)
-    for (const auto& line : lines) {
-        if (records.size() >= maxCount) break;
+    // NO SORTING - file order is already chronological!
+    
+    messagesLoaded = true;
+    LOG_INFO("Loaded %d messages into RAM", allMessages.size());
+    return true;
+}
+
+bool LogQuerySystem::loadCommands() {
+    LOG_INFO("Loading all commands into RAM...");
+    allCommands.clear();
+    allCommands.reserve(100);  // Pre-allocate for efficiency
+    
+    File file = SD.open(COMMAND_LOG_FILE, FILE_READ);
+    if (!file) {
+        LOG_WARN("No command log file found");
+        commandsLoaded = true; // Mark as loaded even if empty
+        return true;
+    }
+    
+    char line[512];
+    bool firstLine = true;
+    
+    while (file.available()) {
+        memset(line, 0, sizeof(line));
+        int lineLength = file.readBytesUntil('\n', line, sizeof(line) - 1);
         
-        MessageRecord record;
-        if (parseCSVLine(line.c_str(), record)) {
-            records.push_back(record);
+        if (lineLength > 0) {
+            line[lineLength] = '\0';
+            
+            // Skip header line
+            if (firstLine) {
+                firstLine = false;
+                continue;
+            }
+            
+            MessageRecord record;
+            if (parseCSVLine(line, record)) {
+                allCommands.push_back(record);  // File order = chronological order
+            }
         }
     }
     
-    return records;
+    file.close();
+    
+    // NO SORTING - file order is already chronological!
+    
+    commandsLoaded = true;
+    LOG_INFO("Loaded %d commands into RAM", allCommands.size());
+    return true;
+}
+
+void LogQuerySystem::refreshData() {
+    messagesLoaded = false;
+    commandsLoaded = false;
+    loadMessages();
+    loadCommands();
 }
 
 std::vector<MessageRecord> LogQuerySystem::queryMessages(const QueryFilter& filter) {
-    std::vector<MessageRecord> results;
-    
-    // For recent queries without specific time ranges, use the faster backwards read
-    if (strlen(filter.startTime) == 0 && strlen(filter.endTime) == 0 && 
-        filter.fromUser == 0 && filter.toUser == 0 && strlen(filter.searchText) == 0 &&
-        !filter.onlyDMs && !filter.onlyBroadcast) {
-        return readRecentRecords(MESSAGE_LOG_FILE, filter.maxResults);
-    }
-    
-    // For filtered queries, use the index-based approach but without sorting
-    if (!indexLoaded) {
-        if (!loadIndex()) {
-            LOG_ERROR("Failed to load message index");
-            return results;
+    if (!messagesLoaded) {
+        if (!loadMessages()) {
+            LOG_ERROR("Failed to load messages");
+            return std::vector<MessageRecord>();
         }
     }
     
-    // Filter using index (index is already in file order, newest first)
-    std::vector<uint32_t> candidatePositions;
+    std::vector<MessageRecord> results;
+    results.reserve(filter.maxResults);
     
-    for (const auto& entry : messageIndex) {
-        if (!isTimestampInRange(entry.timestamp, filter.startTime, filter.endTime)) continue;
-        if (filter.fromUser != 0 && entry.from != filter.fromUser) continue;
-        if (filter.channelHash != 255 && entry.channelHash != filter.channelHash) continue;
-        if (filter.onlyDMs && !entry.isDM) continue;
-        if (filter.onlyBroadcast && entry.isDM) continue;
-        
-        candidatePositions.push_back(entry.filePosition);
-        
-        if (candidatePositions.size() >= filter.maxResults * 2) break; // Get extra for text filtering
-    }
-    
-    // Read the actual records and apply remaining filters
-    auto records = readRecordsAtPositions(candidatePositions);
-    
-    for (const auto& record : records) {
+    for (const auto& record : allMessages) {
         if (matchesFilter(record, filter)) {
             results.push_back(record);
             if (results.size() >= filter.maxResults) break;
@@ -175,41 +176,17 @@ std::vector<MessageRecord> LogQuerySystem::queryMessages(const QueryFilter& filt
 }
 
 std::vector<MessageRecord> LogQuerySystem::queryCommands(const QueryFilter& filter) {
-    std::vector<MessageRecord> results;
-    
-    // For recent queries without specific time ranges, use the faster backwards read
-    if (strlen(filter.startTime) == 0 && strlen(filter.endTime) == 0 && 
-        filter.fromUser == 0 && filter.toUser == 0 && strlen(filter.searchText) == 0 &&
-        !filter.onlyDMs && !filter.onlyBroadcast) {
-        return readRecentRecords(COMMAND_LOG_FILE, filter.maxResults);
-    }
-    
-    if (!commandIndexLoaded) {
-        if (!loadCommandIndex()) {
-            LOG_ERROR("Failed to load command index");
-            return results;
+    if (!commandsLoaded) {
+        if (!loadCommands()) {
+            LOG_ERROR("Failed to load commands");
+            return std::vector<MessageRecord>();
         }
     }
     
-    // Filter using command index (index is already in file order, newest first)
-    std::vector<uint32_t> candidatePositions;
+    std::vector<MessageRecord> results;
+    results.reserve(filter.maxResults);
     
-    for (const auto& entry : commandIndex) {
-        if (!isTimestampInRange(entry.timestamp, filter.startTime, filter.endTime)) continue;
-        if (filter.fromUser != 0 && entry.from != filter.fromUser) continue;
-        if (filter.channelHash != 255 && entry.channelHash != filter.channelHash) continue;
-        if (filter.onlyDMs && !entry.isDM) continue;
-        if (filter.onlyBroadcast && entry.isDM) continue;
-        
-        candidatePositions.push_back(entry.filePosition);
-        
-        if (candidatePositions.size() >= filter.maxResults * 2) break; // Get extra for text filtering
-    }
-    
-    // Read the actual command records and apply remaining filters
-    auto records = readCommandsAtPositions(candidatePositions);
-    
-    for (const auto& record : records) {
+    for (const auto& record : allCommands) {
         if (matchesFilter(record, filter)) {
             results.push_back(record);
             if (results.size() >= filter.maxResults) break;
@@ -220,15 +197,45 @@ std::vector<MessageRecord> LogQuerySystem::queryCommands(const QueryFilter& filt
 }
 
 std::vector<MessageRecord> LogQuerySystem::getRecentMessages(int count) {
-    QueryFilter filter;
-    filter.maxResults = count;
-    return queryMessages(filter); // This will use the fast backwards read
+    if (!messagesLoaded) {
+        if (!loadMessages()) {
+            LOG_ERROR("Failed to load messages");
+            return std::vector<MessageRecord>();
+        }
+    }
+    
+    std::vector<MessageRecord> results;
+    results.reserve(count);
+    
+    // Just take the last N messages from the vector (most recent)
+    int startIndex = std::max(0, (int)allMessages.size() - count);
+    
+    for (int i = allMessages.size() - 1; i >= startIndex; i--) {
+        results.push_back(allMessages[i]);
+    }
+    
+    return results;
 }
 
 std::vector<MessageRecord> LogQuerySystem::getRecentCommands(int count) {
-    QueryFilter filter;
-    filter.maxResults = count;
-    return queryCommands(filter); // This will use the fast backwards read
+    if (!commandsLoaded) {
+        if (!loadCommands()) {
+            LOG_ERROR("Failed to load commands");
+            return std::vector<MessageRecord>();
+        }
+    }
+    
+    std::vector<MessageRecord> results;
+    results.reserve(count);
+    
+    // Just take the last N commands from the vector (most recent)
+    int startIndex = std::max(0, (int)allCommands.size() - count);
+    
+    for (int i = allCommands.size() - 1; i >= startIndex; i--) {
+        results.push_back(allCommands[i]);
+    }
+    
+    return results;
 }
 
 std::vector<MessageRecord> LogQuerySystem::getMessagesFromUser(uint32_t fromUser, int count) {
@@ -246,40 +253,25 @@ std::vector<MessageRecord> LogQuerySystem::getCommandsFromUser(uint32_t fromUser
 }
 
 std::vector<MessageRecord> LogQuerySystem::getDMsWithUser(uint32_t user, int count) {
-    QueryFilter filter;
-    filter.onlyDMs = true;
-    filter.maxResults = count;
-    
-    // Get messages both from and to this user
-    auto fromUser = queryMessages(filter);
-    filter.fromUser = 0;
-    filter.toUser = user;
-    auto toUser = queryMessages(filter);
-    
-    // Merge results (both are already in file order, newest first)
-    std::vector<MessageRecord> combined;
-    combined.insert(combined.end(), fromUser.begin(), fromUser.end());
-    combined.insert(combined.end(), toUser.begin(), toUser.end());
-    
-    // Remove duplicates and limit results (keep file order)
-    std::vector<MessageRecord> result;
-    for (const auto& record : combined) {
-        if (result.size() >= count) break;
-        
-        bool isDuplicate = false;
-        for (const auto& existing : result) {
-            if (strcmp(existing.timestamp, record.timestamp) == 0 && 
-                existing.from == record.from) {
-                isDuplicate = true;
-                break;
-            }
-        }
-        if (!isDuplicate) {
-            result.push_back(record);
+    if (!messagesLoaded) {
+        if (!loadMessages()) {
+            LOG_ERROR("Failed to load messages");
+            return std::vector<MessageRecord>();
         }
     }
     
-    return result;
+    std::vector<MessageRecord> results;
+    results.reserve(count);
+    
+    // Search backwards through messages (most recent first) for DMs with this user
+    for (int i = allMessages.size() - 1; i >= 0 && results.size() < count; i--) {
+        const auto& record = allMessages[i];
+        if (record.isDM && (record.from == user || record.to == user)) {
+            results.push_back(record);
+        }
+    }
+    
+    return results;
 }
 
 std::vector<MessageRecord> LogQuerySystem::getChannelMessages(uint32_t channelHash, int count) {
@@ -339,11 +331,8 @@ std::vector<MessageRecord> LogQuerySystem::searchCommands(const char* searchText
     return queryCommands(filter);
 }
 
-// Fixed CSV parsing to handle quoted fields properly
 bool LogQuerySystem::parseCSVLine(const char* line, MessageRecord& record) {
     // Parse: timestamp,from,to,sender_name,channel,message
-    // Handle quoted fields properly
-    
     const char* ptr = line;
     char field[512];
     int fieldIndex = 0;
@@ -388,14 +377,14 @@ bool LogQuerySystem::parseCSVLine(const char* line, MessageRecord& record) {
         switch (fieldIndex) {
             case 0: // timestamp
                 strncpy(record.timestamp, field, sizeof(record.timestamp) - 1);
-    record.timestamp[sizeof(record.timestamp) - 1] = '\0';
+                record.timestamp[sizeof(record.timestamp) - 1] = '\0';
                 break;
             case 1: // from
                 record.from = strtoul(field, nullptr, 16);
                 break;
             case 2: // to
                 record.to = strtoul(field, nullptr, 16);
-    record.isDM = (record.to != 0);
+                record.isDM = (record.to != 0);
                 break;
             case 3: // sender_name
                 strncpy(record.senderName, field, sizeof(record.senderName) - 1);
@@ -409,9 +398,9 @@ bool LogQuerySystem::parseCSVLine(const char* line, MessageRecord& record) {
                 record.message[sizeof(record.message) - 1] = '\0';
                 break;
         }
-    
+        
         fieldIndex++;
-    
+        
         // Skip to next field
         if (*ptr == ',') {
             ptr++;
@@ -422,8 +411,21 @@ bool LogQuerySystem::parseCSVLine(const char* line, MessageRecord& record) {
 }
 
 bool LogQuerySystem::matchesFilter(const MessageRecord& record, const QueryFilter& filter) {
+    // Time range check
+    if (!isTimestampInRange(record.timestamp, filter.startTime, filter.endTime)) return false;
+    
+    // User filters
+    if (filter.fromUser != 0 && record.from != filter.fromUser) return false;
     if (filter.toUser != 0 && record.to != filter.toUser) return false;
     
+    // Channel filter
+    if (filter.channelHash != 255 && record.channelHash != filter.channelHash) return false;
+    
+    // DM/Broadcast filters
+    if (filter.onlyDMs && !record.isDM) return false;
+    if (filter.onlyBroadcast && record.isDM) return false;
+    
+    // Text search
     if (strlen(filter.searchText) > 0) {
         // Case-insensitive search in message text
         char lowerMessage[256], lowerSearch[64];
@@ -442,254 +444,77 @@ bool LogQuerySystem::matchesFilter(const MessageRecord& record, const QueryFilte
     return true;
 }
 
-std::vector<MessageRecord> LogQuerySystem::readRecordsAtPositions(const std::vector<uint32_t>& positions) {
-    std::vector<MessageRecord> records;
-    
-    File file = SD.open(MESSAGE_LOG_FILE, FILE_READ);
-    if (!file) {
-        LOG_ERROR("Failed to open message log file");
-        return records;
-    }
-    
-    char line[512];
-    for (uint32_t pos : positions) {
-        memset(line, 0, sizeof(line));
-        file.seek(pos);
-        if (file.readBytesUntil('\n', line, sizeof(line) - 1) > 0) {
-            line[sizeof(line) - 1] = '\0';
-            
-            MessageRecord record;
-            if (parseCSVLine(line, record)) {
-                records.push_back(record);
-            }
-        }
-    }
-    
-    file.close();
-    return records;
-}
-
-std::vector<MessageRecord> LogQuerySystem::readCommandsAtPositions(const std::vector<uint32_t>& positions) {
-    std::vector<MessageRecord> records;
-    
-    File file = SD.open(COMMAND_LOG_FILE, FILE_READ);
-    if (!file) {
-        LOG_ERROR("Failed to open command log file");
-        return records;
-    }
-    
-    char line[512];
-    for (uint32_t pos : positions) {
-        memset(line, 0, sizeof(line));
-        file.seek(pos);
-        if (file.readBytesUntil('\n', line, sizeof(line) - 1) > 0) {
-            line[sizeof(line) - 1] = '\0';
-            
-            MessageRecord record;
-            if (parseCSVLine(line, record)) {
-                records.push_back(record);
-            }
-        }
-    }
-    
-    file.close();
-    return records;
-}
-
-bool LogQuerySystem::loadIndex() {
-    // This would load a binary index file for faster searches
-    // For now, we'll rebuild it each time (or you could implement caching)
-    return rebuildIndex();
-}
-
-bool LogQuerySystem::loadCommandIndex() {
-    // This would load a binary command index file for faster searches
-    // For now, we'll rebuild it each time (or you could implement caching)
-    return rebuildCommandIndex();
-}
-
-bool LogQuerySystem::rebuildIndex() {
-    LOG_INFO("Rebuilding message index...");
-    messageIndex.clear();
-    
-    File file = SD.open(MESSAGE_LOG_FILE, FILE_READ);
-    if (!file) {
-        LOG_WARN("No message log file found");
-        indexLoaded = true; // Mark as loaded even if empty
-        return true;
-    }
-    
-    uint32_t position = 0;
-    char line[512];
-    bool firstLine = true;
-    
-    while (file.available()) {
-        memset(line, 0, sizeof(line));
-        position = file.position();
-        int lineLength = file.readBytesUntil('\n', line, sizeof(line) - 1);
-        
-        if (lineLength > 0) {
-            line[lineLength] = '\0';
-            
-            // Skip header line
-            if (firstLine) {
-                firstLine = false;
-                continue;
-            }
-            
-            MessageRecord record;
-            if (parseCSVLine(line, record)) {
-                IndexEntry entry;
-                strncpy(entry.timestamp, record.timestamp, sizeof(entry.timestamp) - 1);
-                entry.timestamp[sizeof(entry.timestamp) - 1] = '\0';
-                entry.filePosition = position;
-                entry.from = record.from;
-                entry.channelHash = record.channelHash;
-                entry.isDM = record.isDM;
-                
-                messageIndex.push_back(entry);
-            }
-        }
-    }
-    
-    file.close();
-    
-    // DON'T sort - keep in file order (oldest first in index)
-    // When we iterate through index, we'll go backwards for recent queries
-    
-    indexLoaded = true;
-    LOG_INFO("Message index rebuilt with %d entries", messageIndex.size());
-    return true;
-}
-
-bool LogQuerySystem::rebuildCommandIndex() {
-    LOG_INFO("Rebuilding command index...");
-    commandIndex.clear();
-    
-    File file = SD.open(COMMAND_LOG_FILE, FILE_READ);
-    if (!file) {
-        LOG_WARN("No command log file found");
-        commandIndexLoaded = true; // Mark as loaded even if empty
-        return true;
-    }
-    
-    uint32_t position = 0;
-    char line[512];
-    bool firstLine = true;
-    
-    while (file.available()) {
-        memset(line, 0, sizeof(line));
-        position = file.position();
-        int lineLength = file.readBytesUntil('\n', line, sizeof(line) - 1);
-        
-        if (lineLength > 0) {
-            line[lineLength] = '\0';
-            
-            // Skip header line
-            if (firstLine) {
-                firstLine = false;
-                continue;
-            }
-            
-            MessageRecord record;
-            if (parseCSVLine(line, record)) {
-                IndexEntry entry;
-                strncpy(entry.timestamp, record.timestamp, sizeof(entry.timestamp) - 1);
-                entry.timestamp[sizeof(entry.timestamp) - 1] = '\0';
-                entry.filePosition = position;
-                entry.from = record.from;
-                entry.channelHash = record.channelHash;
-                entry.isDM = record.isDM;
-                
-                commandIndex.push_back(entry);
-            }
-        }
-    }
-    
-    file.close();
-    
-    // DON'T sort - keep in file order (oldest first in index)
-    // When we iterate through index, we'll go backwards for recent queries
-    
-    commandIndexLoaded = true;
-    LOG_INFO("Command index rebuilt with %d entries", commandIndex.size());
-    return true;
-}
-
 LogQuerySystem::LogStats LogQuerySystem::getLogStatistics() {
     LogStats stats = {};
     memset(stats.oldestTimestamp, 0, sizeof(stats.oldestTimestamp));
     memset(stats.newestTimestamp, 0, sizeof(stats.newestTimestamp));
     
-    if (!indexLoaded) {
-        loadIndex();
-    }
-    if (!commandIndexLoaded) {
-        loadCommandIndex();
-    }
+    if (!messagesLoaded) loadMessages();
+    if (!commandsLoaded) loadCommands();
     
-    // Simple array to track unique users (instead of std::set)
-    uint32_t uniqueUsers[100];  // Adjust size as needed
+    // Simple array to track unique users
+    uint32_t uniqueUsers[100];
     int uniqueUserCount = 0;
     
-    // Process message index (in file order, so first = oldest, last = newest)
-    if (!messageIndex.empty()) {
-        strncpy(stats.oldestTimestamp, messageIndex.front().timestamp, sizeof(stats.oldestTimestamp) - 1);
-        stats.oldestTimestamp[sizeof(stats.oldestTimestamp) - 1] = '\0';
-        strncpy(stats.newestTimestamp, messageIndex.back().timestamp, sizeof(stats.newestTimestamp) - 1);
-        stats.newestTimestamp[sizeof(stats.newestTimestamp) - 1] = '\0';
-    }
-    
-    for (const auto& entry : messageIndex) {
+    // Process messages
+    for (const auto& record : allMessages) {
         stats.totalMessages++;
-        if (entry.isDM) stats.totalDMs++;
+        if (record.isDM) stats.totalDMs++;
         else stats.totalBroadcasts++;
         
-        // Check if user is already in our list
+        // Track unique users
         bool found = false;
         for (int i = 0; i < uniqueUserCount; i++) {
-            if (uniqueUsers[i] == entry.from) {
+            if (uniqueUsers[i] == record.from) {
                 found = true;
                 break;
             }
         }
         
-        // Add new user if not found and we have space
         if (!found && uniqueUserCount < 100) {
-            uniqueUsers[uniqueUserCount++] = entry.from;
-        }
-    }
-    
-    // Process command index
-    for (const auto& entry : commandIndex) {
-        stats.totalCommands++;
-        
-        // Check if user is already in our list
-        bool found = false;
-        for (int i = 0; i < uniqueUserCount; i++) {
-            if (uniqueUsers[i] == entry.from) {
-                found = true;
-                break;
-            }
+            uniqueUsers[uniqueUserCount++] = record.from;
         }
         
-        // Add new user if not found and we have space
-        if (!found && uniqueUserCount < 100) {
-            uniqueUsers[uniqueUserCount++] = entry.from;
-        }
-        
-        // Update oldest/newest if commands extend the range
-        if (!commandIndex.empty()) {
+        // Update oldest/newest timestamps
         if (strlen(stats.oldestTimestamp) == 0 || 
-                parseTimestampToSeconds(commandIndex.front().timestamp) < parseTimestampToSeconds(stats.oldestTimestamp)) {
-                strncpy(stats.oldestTimestamp, commandIndex.front().timestamp, sizeof(stats.oldestTimestamp) - 1);
+            record.getTimestampSeconds() < parseTimestampToSeconds(stats.oldestTimestamp)) {
+            strncpy(stats.oldestTimestamp, record.timestamp, sizeof(stats.oldestTimestamp) - 1);
             stats.oldestTimestamp[sizeof(stats.oldestTimestamp) - 1] = '\0';
         }
         if (strlen(stats.newestTimestamp) == 0 ||
-                parseTimestampToSeconds(commandIndex.back().timestamp) > parseTimestampToSeconds(stats.newestTimestamp)) {
-                strncpy(stats.newestTimestamp, commandIndex.back().timestamp, sizeof(stats.newestTimestamp) - 1);
+            record.getTimestampSeconds() > parseTimestampToSeconds(stats.newestTimestamp)) {
+            strncpy(stats.newestTimestamp, record.timestamp, sizeof(stats.newestTimestamp) - 1);
             stats.newestTimestamp[sizeof(stats.newestTimestamp) - 1] = '\0';
+        }
+    }
+    
+    // Process commands
+    for (const auto& record : allCommands) {
+        stats.totalCommands++;
+        
+        // Track unique users
+        bool found = false;
+        for (int i = 0; i < uniqueUserCount; i++) {
+            if (uniqueUsers[i] == record.from) {
+                found = true;
+                break;
             }
+        }
+        
+        if (!found && uniqueUserCount < 100) {
+            uniqueUsers[uniqueUserCount++] = record.from;
+        }
+        
+        // Update timestamps
+        if (strlen(stats.oldestTimestamp) == 0 || 
+            record.getTimestampSeconds() < parseTimestampToSeconds(stats.oldestTimestamp)) {
+            strncpy(stats.oldestTimestamp, record.timestamp, sizeof(stats.oldestTimestamp) - 1);
+            stats.oldestTimestamp[sizeof(stats.oldestTimestamp) - 1] = '\0';
+        }
+        if (strlen(stats.newestTimestamp) == 0 ||
+            record.getTimestampSeconds() > parseTimestampToSeconds(stats.newestTimestamp)) {
+            strncpy(stats.newestTimestamp, record.timestamp, sizeof(stats.newestTimestamp) - 1);
+            stats.newestTimestamp[sizeof(stats.newestTimestamp) - 1] = '\0';
         }
     }
     
