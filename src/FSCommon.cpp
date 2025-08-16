@@ -35,14 +35,14 @@ SPIClass SPI1(HSPI);
 
 
 void sdPowerOn() {
-    digitalWrite(SD_POWER_PIN, HIGH);
-    delay(100);  // Give it time to stabilize power
+    //digitalWrite(SD_POWER_PIN, HIGH);
+    //delay(100);  // Give it time to stabilize power
     Serial.println("SD Card powered ON");
 }
 
 // Function to turn SD card power off
 void sdPowerOff() {
-    digitalWrite(SD_POWER_PIN, LOW);
+    //digitalWrite(SD_POWER_PIN, LOW);
     Serial.println("SD Card powered OFF");
 }
 

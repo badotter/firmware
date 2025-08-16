@@ -364,14 +364,14 @@ void testSDCard() {
     //delay(1000);
 
     LOG_DEBUG("SD card power ON");
-    digitalWrite(SD_POWER_PIN, HIGH);
-    delay(250);
+    //digitalWrite(SD_POWER_PIN, HIGH);
+    //delay(250);
 
     //SDHandler.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
     SPInew.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
-    if (!SD.begin(SD_CS_PIN, SPInew, 4000000U)) {
+    if (!SD.begin(SD_CS_PIN, SPInew, 400000U)) {//change from 4 MHz to 400 kHz
         LOG_DEBUG("SD init failed");
-        digitalWrite(SD_POWER_PIN, LOW);
+        //digitalWrite(SD_POWER_PIN, LOW);
         return;
     }
 
@@ -384,12 +384,12 @@ void testSDCard() {
 
     if (cardType == CARD_NONE) {
         LOG_DEBUG("No SD card attached");
-        digitalWrite(SD_POWER_PIN, LOW);
+        //digitalWrite(SD_POWER_PIN, LOW);
         return;
     }
 
     // Try to write file
-    File testFile = SD.open("/test4.txt", FILE_WRITE);
+    File testFile = SD.open("/test_file.txt", FILE_WRITE);
     if (testFile) {
         LOG_DEBUG("File opened for writing");
         testFile.println("Hello from Meshtastic!");
@@ -413,7 +413,7 @@ void testSDCard() {
        LOG_DEBUG("Failed to open file for reading");
     }*/
 
-    digitalWrite(SD_POWER_PIN, LOW);
+    //digitalWrite(SD_POWER_PIN, LOW);
     LOG_DEBUG("SD test complete");
 }
 #endif
@@ -424,9 +424,9 @@ void setup()
 
 #ifdef HAS_SDCARD
     // Initialize the power control pin as output
-    pinMode(SD_POWER_PIN, OUTPUT);
+    //pinMode(SD_POWER_PIN, OUTPUT);
     // Initially keep SD card powered OFF
-    digitalWrite(SD_POWER_PIN, LOW);
+    //digitalWrite(SD_POWER_PIN, LOW);
 #endif
 
 #if defined(PIN_POWER_EN)

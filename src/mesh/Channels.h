@@ -94,6 +94,10 @@ class Channels
 
     bool ensureLicensedOperation();
 
+    //int8_t lookupChannelByHash(ChannelHash channelHash) {
+    //    return getIndexByHash(channelHash);
+    //}
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
