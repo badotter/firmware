@@ -15,6 +15,12 @@
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
 #endif
+
+#ifdef ARCH_ESP32 //MeshRes
+class OTAUpdateManager;
+extern OTAUpdateManager* otaManager;
+#endif
+
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;

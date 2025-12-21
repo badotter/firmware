@@ -52,6 +52,10 @@ PCA9557 io(0x18, &Wire);
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
+
+#include "modules/OTAUpdateManager.h"
+OTAUpdateManager* otaManager = nullptr;
+
 #endif
 
 #ifdef ARCH_NRF52
@@ -161,6 +165,8 @@ void setupNicheGraphics();
 
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 SPIClass SPI1(HSPI);
+#define PICO_UART_TX 3
+#define PICO_UART_RX 2
 #endif
 
 using namespace concurrency;
@@ -248,6 +254,18 @@ const char *getDeviceName()
     return name;
 }
 
+//OtterNet mods - for long uptime, schedule reboot every 24 hours
+uint32_t scheduledRebootAtMillis = 0;
+
+void scheduleMaintenanceReboot() {
+    uint32_t baseUptimeHours = 24;
+    uint32_t randomMinutes = random(0, 61);
+    uint32_t totalUptimeMs = (baseUptimeHours * 3600 + randomMinutes * 60) * 1000;
+    scheduledRebootAtMillis = millis() + totalUptimeMs;
+    LOG_INFO("Maintenance reboot scheduled in %d hours %d minutes",
+             baseUptimeHours, randomMinutes);
+}
+//End OtterNet mods
 static int32_t ledBlinker()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
@@ -303,6 +321,15 @@ void setup()
     digitalWrite(DCDC_EN_HOLD, HIGH);
     pinMode(NRF_ON, OUTPUT);
     digitalWrite(NRF_ON, HIGH);
+#endif
+
+//OtterNet
+#if defined(PICO_UART_TX) && defined(PICO_UART_RX)
+    // For Raspberry Pi Pico, set up the default Serial to use specific pins
+    // This must be done before any Serial.print() calls
+    Serial1.begin(115200, SERIAL_8N1, PICO_UART_RX, PICO_UART_TX);
+    delay(100); // Give some time for Serial to initialize
+    Serial1.println("Hello Pico!");
 #endif
 
 #if defined(PIN_POWER_EN)
@@ -1589,9 +1616,11 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 }
 #endif
 
+ uint32_t loopCounter = 0;
 #ifndef PIO_UNIT_TESTING
 void loop()
 {
+    loopCounter++;
     runASAP = false;
 
 #ifdef ARCH_ESP32
