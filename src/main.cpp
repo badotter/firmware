@@ -53,7 +53,7 @@ PCA9557 io(0x18, &Wire);
 NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
 
-#include "modules/OTAUpdateManager.h"
+#include "OtterNet/OTAUpdateManager.h"
 OTAUpdateManager* otaManager = nullptr;
 
 #endif
@@ -165,11 +165,16 @@ void setupNicheGraphics();
 
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 SPIClass SPI1(HSPI);
-#define PICO_UART_TX 3
-#define PICO_UART_RX 2
 #endif
 
 using namespace concurrency;
+
+//OtterNet
+
+#include "OtterNet/picoLogger.h"
+#define PICO_UART_TX 38
+#define PICO_UART_RX 39
+
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
@@ -325,11 +330,14 @@ void setup()
 
 //OtterNet
 #if defined(PICO_UART_TX) && defined(PICO_UART_RX)
+
+    otaManager = new OTAUpdateManager();
+
     // For Raspberry Pi Pico, set up the default Serial to use specific pins
     // This must be done before any Serial.print() calls
     Serial1.begin(115200, SERIAL_8N1, PICO_UART_RX, PICO_UART_TX);
     delay(100); // Give some time for Serial to initialize
-    Serial1.println("Hello Pico!");
+    Serial1.println("Hello from Heltec to Pico!");
 #endif
 
 #if defined(PIN_POWER_EN)
@@ -1616,12 +1624,22 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 }
 #endif
 
- uint32_t loopCounter = 0;
+uint32_t loopCounter = 0;
 #ifndef PIO_UNIT_TESTING
 void loop()
 {
     loopCounter++;
     runASAP = false;
+
+    //OtterNet
+    if (otaManager && otaManager->isInOTAMode()) {
+        otaManager->loop();
+
+        //yield();  // or esp_task_wdt_reset();
+        //delay(10);  // Small delay to prevent tight loop
+        //return;  // Skip mesh processing
+    }
+
 
 #ifdef ARCH_ESP32
     esp32Loop();
@@ -1653,6 +1671,18 @@ void loop()
     }
 #endif
     long delayMsec = mainController.runOrDelay();
+
+#if defined(PICO_UART_TX) || defined(PICO_UART_RX)
+    //if (loopCounter % 900 == 0) { // every ~9 seconds at 100ms delay
+    //    Serial1.println("Heltec talking to pico!");
+    //    LOG_INFO("Sending pico UART message.");
+    //}
+    //while  (Serial1.available()) {
+    PicoLogger::checkForResponses();
+    //    String response = Serial1.readStringUntil('\n');
+    //    LOG_INFO("From Pico: %s", response.c_str());
+    //}
+#endif
 
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {

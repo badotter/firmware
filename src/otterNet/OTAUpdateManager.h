@@ -13,10 +13,14 @@ private:
     uint32_t otaModeStartTime;
     static const uint32_t OTA_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
     String apPassword;
+    bool picoFirmwareReady = false;
+    uint32_t upload_progress = 0;
     
     void handleRoot();
-    void handleUpload();
-    void handleUploadFinish();
+    void handleHeltecUpload();
+    void handleHeltecUploadFinish();
+    void handlePicoUpload();
+    void handlePicoUploadFinish();
     void handleNotFound();
     
 public:
@@ -37,6 +41,7 @@ public:
     
     // Password management
     String getOTAPassword();
+
 };
 
 extern OTAUpdateManager* otaManager;

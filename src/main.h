@@ -16,7 +16,7 @@
 extern NimbleBluetooth *nimbleBluetooth;
 #endif
 
-#ifdef ARCH_ESP32 //MeshRes
+#ifdef ARCH_ESP32 //OtterNet
 class OTAUpdateManager;
 extern OTAUpdateManager* otaManager;
 #endif
