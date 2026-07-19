@@ -30,12 +30,13 @@ static const uint32_t ADMIN_NODES[] = {
 };
 
 bool HeltecCommandProcessor::isAdmin(uint32_t node_id) {
-    for (int i = 0; i < sizeof(ADMIN_NODES) / sizeof(ADMIN_NODES[0]); i++) {
-        if (ADMIN_NODES[i] == node_id) {
-            return true;
-        }
-    }
-    return false;
+    return true;
+    //for (int i = 0; i < sizeof(ADMIN_NODES) / sizeof(ADMIN_NODES[0]); i++) {
+    //    if (ADMIN_NODES[i] == node_id) {
+    //        return true;
+    //    }
+    //}
+    //return false;
 }
 // end temporary nonsense ///////
 
