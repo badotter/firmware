@@ -1,4 +1,5 @@
 #include "PicoLogger.h"
+#include "otterNetPins.h"
 #include "configuration.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -9,7 +10,7 @@ static bool response_pending = false;
 
 void PicoLogger::sendToSerial(const char* formattedMessage)
 {
-    //#if defined(PICO_UART_TX) && defined(PICO_UART_RX)
+    //#if defined(OTTERNET_PICO_UART_TX) && defined(OTTERNET_PICO_UART_RX)
     Serial1.print(formattedMessage);
     //#endif
 }
@@ -115,18 +116,21 @@ void PicoLogger::checkForResponses()
         ping_pending     = true;
     }
 
-    if (ping_pending && (now - ping_sent_at_ms >= PING_TIMEOUT_MS)) {
-        LOG_WARN("Watchdog: Pico did not respond to PING, rebooting...");
-        ping_pending = false;
-        last_ping_sent_ms = now;  // Reset so we ping again after it comes back up
-        pinMode(3, OUTPUT);
-        digitalWrite(3, LOW);
-        delay(300);
-        digitalWrite(3, HIGH);
-        pinMode(3, INPUT);
-    }
+    //Killing the actual reboot for now, again, but will need to revisit if pico keeps hanging.
+    //Might just need much longer intervals, things happen slower than we think on the pico.
+    //
+    //if (ping_pending && (now - ping_sent_at_ms >= PING_TIMEOUT_MS)) {
+    //    LOG_WARN("Watchdog: Pico did not respond to PING, rebooting...");
+    //    ping_pending = false;
+    //    last_ping_sent_ms = now;  // Reset so we ping again after it comes back up
+    //    pinMode(OTTERNET_PICO_RESET_PIN, OUTPUT);
+    //    digitalWrite(OTTERNET_PICO_RESET_PIN, LOW);
+    //    delay(OTTERNET_PICO_RESET_MS);
+    //    digitalWrite(OTTERNET_PICO_RESET_PIN, HIGH);
+    //    pinMode(OTTERNET_PICO_RESET_PIN, INPUT);
+    //}
 
-    //#if defined(PICO_UART_TX) && defined(PICO_UART_RX)
+    //#if defined(OTTERNET_PICO_UART_TX) && defined(OTTERNET_PICO_UART_RX)
     static char uart_buffer[512];
     static int uart_idx = 0;
     

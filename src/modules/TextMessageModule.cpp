@@ -5,8 +5,8 @@
 #include "buzz.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
-#include "../OtterNet/picoLogger.h"
-#include "../OtterNet/HeltecCommandProcessor.h"
+#include "../otterNet/picoLogger.h"
+#include "../otterNet/HeltecCommandProcessor.h"
 
 TextMessageModule *textMessageModule;
 
@@ -17,7 +17,7 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     LOG_INFO("Received text msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
 
-    // OtterNet Pico Interface  /////////////////////////////////////////////
+    // otterNet Pico Interface  /////////////////////////////////////////////
     // Extract payload for command detection
     char payload[256];
     size_t len = mp.decoded.payload.size < sizeof(payload) - 1 ?
@@ -45,7 +45,7 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     // Regular message - log it
     PicoLogger::handleMessage(mp);
 
-    //End OtterNet Pico Interface  /////////////////////////////////////////
+    //End otterNet Pico Interface  /////////////////////////////////////////
 
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.

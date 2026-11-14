@@ -32,6 +32,7 @@ private:
     static LocalCommandResult handleStatus(uint32_t from_node);
     static LocalCommandResult handlePing(uint32_t from_node);
     static LocalCommandResult handleRebootPico(uint32_t from_node);
+    static LocalCommandResult handleCycle3V3(uint32_t from_node);
     
     // Authorization
     static bool isAdmin(uint32_t node_id);

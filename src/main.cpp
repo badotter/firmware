@@ -53,7 +53,7 @@ PCA9557 io(0x18, &Wire);
 NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
 
-#include "OtterNet/OTAUpdateManager.h"
+#include "otterNet/OTAUpdateManager.h"
 OTAUpdateManager* otaManager = nullptr;
 
 #endif
@@ -169,11 +169,10 @@ SPIClass SPI1(HSPI);
 
 using namespace concurrency;
 
-//OtterNet
+//otterNet
 
-#include "OtterNet/picoLogger.h"
-#define PICO_UART_TX 38
-#define PICO_UART_RX 39
+#include "otterNet/picoLogger.h"
+#include "otterNet/otterNetPins.h"
 
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
@@ -259,7 +258,7 @@ const char *getDeviceName()
     return name;
 }
 
-//OtterNet mods - for long uptime, schedule reboot every 24 hours
+//otterNet mods - for long uptime, schedule reboot every 24 hours
 uint32_t scheduledRebootAtMillis = 0;
 
 void scheduleMaintenanceReboot() {
@@ -270,7 +269,8 @@ void scheduleMaintenanceReboot() {
     LOG_INFO("Maintenance reboot scheduled in %d hours %d minutes",
              baseUptimeHours, randomMinutes);
 }
-//End OtterNet mods
+//End otterNet mods
+
 static int32_t ledBlinker()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
@@ -328,14 +328,14 @@ void setup()
     digitalWrite(NRF_ON, HIGH);
 #endif
 
-//OtterNet
-#if defined(PICO_UART_TX) && defined(PICO_UART_RX)
+//otterNet
+#if defined(OTTERNET_PICO_UART_TX) && defined(OTTERNET_PICO_UART_RX)
 
     otaManager = new OTAUpdateManager();
 
     // For Raspberry Pi Pico, set up the default Serial to use specific pins
     // This must be done before any Serial.print() calls
-    Serial1.begin(115200, SERIAL_8N1, PICO_UART_RX, PICO_UART_TX);
+    Serial1.begin(115200, SERIAL_8N1, OTTERNET_PICO_UART_RX, OTTERNET_PICO_UART_TX);
     delay(100); // Give some time for Serial to initialize
     Serial1.println("Hello from Heltec to Pico!");
 #endif
@@ -1631,7 +1631,7 @@ void loop()
     loopCounter++;
     runASAP = false;
 
-    //OtterNet
+    //otterNet
     if (otaManager && otaManager->isInOTAMode()) {
         otaManager->loop();
 
@@ -1672,7 +1672,7 @@ void loop()
 #endif
     long delayMsec = mainController.runOrDelay();
 
-#if defined(PICO_UART_TX) || defined(PICO_UART_RX)
+#if defined(OTTERNET_PICO_UART_TX) || defined(OTTERNET_PICO_UART_RX)
     //if (loopCounter % 900 == 0) { // every ~9 seconds at 100ms delay
     //    Serial1.println("Heltec talking to pico!");
     //    LOG_INFO("Sending pico UART message.");

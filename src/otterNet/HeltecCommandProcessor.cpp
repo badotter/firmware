@@ -3,6 +3,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include "./HeltecCommandProcessor.h"
+#include "./otterNetPins.h"
 #include "./picoLogger.h"
 #include "./OTAUpdateManager.h"
 
@@ -11,7 +12,7 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 
 
 static const char* heltec_commands[] = {
-    "reboot", "ota", "status", "ping", "rebootPico"
+    "reboot", "ota", "status", "ping", "rebootPico", "cycle3v3"
 };
 
 //NEW: in order to avoid updating the Heltec firmware every time we add a new command, just forward all non-Heltec commands to the Pico.
@@ -20,7 +21,7 @@ static const char* heltec_commands[] = {
 //};
 
 ///////////////////////////////////////////////////////////
-//OtterNet: this part is nonsense, we will get admin status from database. 
+//otterNet: this part is nonsense, we will get admin status from database. 
 //Send the node ID to the Pico and let it decide the permission level.
 
 // Admin node IDs - these should be configurable or stored in preferences
@@ -176,11 +177,28 @@ LocalCommandResult HeltecCommandProcessor::handleRebootPico(uint32_t from_node) 
     result.success = true;
     snprintf(result.response, sizeof(result.response), "Rebooting Pico...");
     
-    pinMode(3, OUTPUT);
-    digitalWrite(3, LOW);
-    delay(300);
-    digitalWrite(3, HIGH);
-    pinMode(3, INPUT);  // Let Pico drive it again
+    pinMode(OTTERNET_PICO_RESET_PIN, OUTPUT);
+    digitalWrite(OTTERNET_PICO_RESET_PIN, LOW);
+    delay(OTTERNET_PICO_RESET_MS);
+    digitalWrite(OTTERNET_PICO_RESET_PIN, HIGH);
+    pinMode(OTTERNET_PICO_RESET_PIN, INPUT);  // Let Pico drive it again
+    
+    return result;
+}
+
+LocalCommandResult HeltecCommandProcessor::handleCycle3V3(uint32_t from_node) {
+    LocalCommandResult result;
+    result.handled = true;
+    result.should_forward_to_pico = false;
+    
+    result.success = true;
+    snprintf(result.response, sizeof(result.response), "Cycled 3.3V...");
+    
+    pinMode(OTTERNET_3V3_CYCLE_PIN, OUTPUT);
+    digitalWrite(OTTERNET_3V3_CYCLE_PIN, HIGH);
+    delay(OTTERNET_3V3_CYCLE_MS);
+    digitalWrite(OTTERNET_3V3_CYCLE_PIN, LOW);
+    pinMode(OTTERNET_3V3_CYCLE_PIN, INPUT);
     
     return result;
 }
@@ -192,7 +210,7 @@ void HeltecCommandProcessor::forwardToPico(const char* command, uint32_t from_no
     
     LOG_INFO("Forwarding to Pico: %s", buffer);
     
-    //#if defined(PICO_UART_TX) && defined(PICO_UART_RX)
+    //#if defined(OTTERNET_PICO_UART_TX) && defined(OTTERNET_PICO_UART_RX)
     Serial1.print(buffer);
     //#else
     //LOG_WARN("Pico UART not configured - command not forwarded");
@@ -266,6 +284,8 @@ bool HeltecCommandProcessor::handleCommand(const meshtastic_MeshPacket &mp) {
             result = handlePing(mp.from);
         } else if (strcmp(command, "rebootPico") == 0) {
             result = handleRebootPico(mp.from);
+        } else if (strcmp(command, "cycle3v3") == 0) {
+            result = handleCycle3V3(mp.from);
         } else {
             result.handled = false;
             result.success = false;
