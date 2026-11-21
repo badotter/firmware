@@ -196,23 +196,6 @@ LocalCommandResult HeltecCommandProcessor::handleRebootPico(uint32_t from_node) 
     return result;
 }
 
-LocalCommandResult HeltecCommandProcessor::handleCycle3V3(uint32_t from_node) {
-    LocalCommandResult result;
-    result.handled = true;
-    result.should_forward_to_pico = false;
-    
-    result.success = true;
-    snprintf(result.response, sizeof(result.response), "Cycled 3.3V...");
-    
-    pinMode(OTTERNET_3V3_CYCLE_PIN, OUTPUT);
-    digitalWrite(OTTERNET_3V3_CYCLE_PIN, HIGH);
-    delay(OTTERNET_3V3_CYCLE_MS);
-    digitalWrite(OTTERNET_3V3_CYCLE_PIN, LOW);
-    pinMode(OTTERNET_3V3_CYCLE_PIN, INPUT);
-    
-    return result;
-}
-
 void HeltecCommandProcessor::forwardToPico(const char* command, uint32_t from_node, uint32_t to_node) {
     // Format: CMD|from_node|to_node|command
     char buffer[512];
