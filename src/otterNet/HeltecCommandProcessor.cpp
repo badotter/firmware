@@ -12,7 +12,7 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 
 
 static const char* heltec_commands[] = {
-    "reboot", "ota", "status", "ping", "rebootPico", "cycle3v3"
+    "reboot", "ota", "status", "ping", "rebootPico"
 };
 
 //NEW: in order to avoid updating the Heltec firmware every time we add a new command, just forward all non-Heltec commands to the Pico.
@@ -177,10 +177,20 @@ LocalCommandResult HeltecCommandProcessor::handleRebootPico(uint32_t from_node) 
     result.success = true;
     snprintf(result.response, sizeof(result.response), "Rebooting Pico...");
     
+    //New method: do both pico reset and 3V3 cyle in one command.
     pinMode(OTTERNET_PICO_RESET_PIN, OUTPUT);
     digitalWrite(OTTERNET_PICO_RESET_PIN, LOW);
-    delay(OTTERNET_PICO_RESET_MS);
-    digitalWrite(OTTERNET_PICO_RESET_PIN, HIGH);
+    
+    pinMode(OTTERNET_3V3_CYCLE_PIN, OUTPUT);
+    digitalWrite(OTTERNET_3V3_CYCLE_PIN, HIGH);
+
+    delay(OTTERNET_3V3_CYCLE_MS); //hold it off for a second
+    
+    digitalWrite(OTTERNET_3V3_CYCLE_PIN, LOW);
+    pinMode(OTTERNET_3V3_CYCLE_PIN, INPUT);
+
+    delay(OTTERNET_3V3_CYCLE_MS); //give it another second to come back online
+
     pinMode(OTTERNET_PICO_RESET_PIN, INPUT);  // Let Pico drive it again
     
     return result;
@@ -284,8 +294,6 @@ bool HeltecCommandProcessor::handleCommand(const meshtastic_MeshPacket &mp) {
             result = handlePing(mp.from);
         } else if (strcmp(command, "rebootPico") == 0) {
             result = handleRebootPico(mp.from);
-        } else if (strcmp(command, "cycle3v3") == 0) {
-            result = handleCycle3V3(mp.from);
         } else {
             result.handled = false;
             result.success = false;

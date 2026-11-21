@@ -23,9 +23,6 @@
 #endif
 
 // Timings (ms)
-#ifndef OTTERNET_PICO_RESET_MS
-#define OTTERNET_PICO_RESET_MS 500
-#endif
 
 #ifndef OTTERNET_3V3_CYCLE_MS
 #define OTTERNET_3V3_CYCLE_MS 1000
